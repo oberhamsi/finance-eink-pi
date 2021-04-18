@@ -4,24 +4,36 @@ import sys
 import os
 import locale
 import time
+import signal
 import urllib.request, json 
 from PIL import Image,ImageDraw,ImageFont, ImageOps
 
 from symbols import symbols
+class GracefulKiller:
+    kill_now = False
+    def __init__(self):
+        signal.signal(signal.SIGINT, self.exit_gracefully)
+        signal.signal(signal.SIGTERM, self.exit_gracefully)
+
+    def exit_gracefully(self,signum, frame):
+        self.kill_now = True
+
 IS_RASP = os.environ['LOGNAME'] == 'pi'
+IS_FULL_REFRESH = time.localtime().tm_hour % 3 == 0
 
 if IS_RASP:
     libdir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'lib')
     if os.path.exists(libdir):
         sys.path.append(libdir)
     from waveshare_epd import epd3in7
+    epd = epd3in7.EPD()
 
 
 
 locale.setlocale(locale.LC_ALL, 'de_AT.utf8')
 ubuntuFont = os.path.join(os.path.dirname(os.path.realpath(__file__)), "UbuntuMono-R.ttf")
 font16 = ImageFont.truetype(ubuntuFont, 16)
-font18 = ImageFont.truetype(ubuntuFont, 18)
+font18 = ImageFont.truetype(ubuntuFont, 22)
 
 symbols = sorted(symbols, key=lambda k: k['name'])
 
@@ -50,69 +62,75 @@ def drawImage(draw, startPoint, isin):
 
 width=480
 height=280
-image = Image.new('L', (width, height), 0xFF)
-draw = ImageDraw.Draw(image)
-y=32
 lineHeight=52
 
-cols = [2, 70, 150, 
-    260, 340]
-colTexts = [
-    'Symbol', 
-    'Price'.rjust(7), 
-    '+/-'.rjust(8), 
-    'Low/High'.rjust(6), 
-    time.strftime("%H:%M:%S", time.localtime()).rjust(17)
-]
-for idx, colText in enumerate(colTexts):
-    draw.text((cols[idx], 0), colText, font=font16, fill=0)
+cols = [2, 85, 180,
+    280, 340]
+def getImage():
+    y=32
+    colTexts = [
+        'WKN', 
+        'Preis'.rjust(7), 
+        'Tag/Gesamt'.rjust(8), 
+        'High/low'.rjust(6), 
+        time.strftime("%H:%M:%S", time.localtime()).rjust(15)
+    ]
+    image = Image.new('L', (width, height), 0xFF)
+    draw = ImageDraw.Draw(image)
+    for idx, colText in enumerate(colTexts):
+        draw.text((cols[idx], 0), colText, font=font16, fill=0)
 
-for symbol in symbols:
-    with urllib.request.urlopen("https://www.tradegate.de/refresh.php?isin=" + symbol['isin']) as url:
-        data = json.loads(url.read().decode())
-        price = toNum(data['last'])
-        cost = 0
-        worth = 0
-        for lot in symbol['lots']:
-            cost += lot['shares'] * lot['cost']
-            worth += lot['shares'] * price
-        dayLow = toNum(data['low'])
-        dayHigh = toNum(data['high'])
-        delta = toNum(data['delta'])
-        vals = [
-            symbol['name'],
-            nf(price).rjust(6),
-            data['delta'].rjust(9),
-            nf(dayHigh).rjust(6)
-        ]
-        lowerVals = [
-            None,
-            None,
-            nfPlus(worth - cost).rjust(9),
-            nf(dayLow).rjust(6)
-        ]
-        for idx, val in enumerate(vals):
-            font = font18 if idx < 2 else font16
-            offsetY = 0 if idx < 2 else -9
-            draw.text((cols[idx], y + offsetY), val, font=font, fill=0)
-            lowerVal = lowerVals[idx]
-            if lowerVal:
-                draw.text((cols[idx], y+20 + offsetY), lowerVal, font=font16, fill=0)
-        try:
-            drawImage(draw, (cols[-1], y), symbol['isin'])
-        except Exception as e:
-            print("error drawing for", symbol['code'], e)
-    y += lineHeight
+    for symbol in symbols:
+        with urllib.request.urlopen("https://www.tradegate.de/refresh.php?isin=" + symbol['isin']) as url:
+            data = json.loads(url.read().decode())
+            price = toNum(data['last'])
+            cost = 0
+            worth = 0
+            for lot in symbol['lots']:
+                cost += lot['shares'] * lot['cost']
+                worth += lot['shares'] * price
+            dayLow = toNum(data['low'])
+            dayHigh = toNum(data['high'])
+            delta = toNum(data['delta'])
+            vals = [
+                symbol['name'],
+                nf(price).rjust(6),
+                data['delta'].rjust(9),
+                nf(dayHigh).rjust(6)
+            ]
+            lowerVals = [
+                None,
+                None,
+                nfPlus(worth - cost).rjust(9),
+                nf(dayLow).rjust(6)
+            ]
+            for idx, val in enumerate(vals):
+                font = font18
+                offsetY = 0
+                lowerVal = lowerVals[idx]
+                if lowerVal:
+                    offsetY = -9
+                    font = font16
+                    draw.text((cols[idx], y+20 + offsetY), lowerVal, font=font16, fill=0)
+                draw.text((cols[idx], y + offsetY), val, font=font, fill=0)
 
+            try:
+                drawImage(draw, (cols[-1], y), symbol['isin'])
+            except Exception as e:
+                print("error drawing for", symbol['code'], e)
+        y += lineHeight
+    return image
 
-if IS_RASP:
-    epd = epd3in7.EPD()
+def draw(image):
     epd.init(0)
-    epd.Clear(0xFF, 0)
     epd.display_4Gray(epd.getbuffer_4Gray(image))
-    #epd.init(0)
-    #epd.Clear(0xFF, 0)
     epd.sleep()
-else:
-    image.show()
 
+if __name__ == '__main__':
+    if IS_RASP:
+        image = getImage()
+        draw(image)
+    else:
+        image = getImage()
+        image.show()
+    
