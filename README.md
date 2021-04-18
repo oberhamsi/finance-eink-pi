@@ -2,8 +2,9 @@ small python skript to display tradegate data on a waveshare e-ink
 
 important
 
- * the code is configured for a 3.7 inch display. every size needs a different library which you have to put into `lib/`. see the waveshare documentation https://github.com/waveshare/e-Paper/tree/master/RaspberryPi_JetsonNano/python
  * you need locale "de_AT.UTF-8 UTF-8" installed. do so in raspi-config's Localization setting
+ * install the only dependency python-pil
+ * the code is configured for a 3.7 inch display. every size needs a different library which you have to put into `lib/`. see the waveshare documentation https://github.com/waveshare/e-Paper/tree/master/RaspberryPi_JetsonNano/python
  * for different display sizes change `width` and `height` in main.py.
  * symbols.py holds the stocks to display and optionally the owned lots.
 
