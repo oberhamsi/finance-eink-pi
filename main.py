@@ -95,7 +95,7 @@ def getImage():
             vals = [
                 symbol['name'],
                 nf(price).rjust(6),
-                data['delta'].rjust(9),
+                str(data['delta']).rjust(9),
                 nf(dayHigh).rjust(6)
             ]
             lowerVals = [
