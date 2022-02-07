@@ -42,6 +42,7 @@ def nf(val):
 
 def toNum(val):
     if (type(val) == str):
+        val = val.replace(' ', '')
         val = val.replace('%', '')
         val = locale.atof(val)
     return val
